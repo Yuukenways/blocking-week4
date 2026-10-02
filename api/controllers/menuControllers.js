@@ -1,4 +1,5 @@
 const db = require("../config/database");
+const isValidHarga = (harga) => /^\d{1,63}(?:\.\d{1,2})?$/.test(String(harga).trim());
 
 /**
  * GET /api/menu
@@ -10,7 +11,7 @@ const db = require("../config/database");
  * - Sorting (sortBy: nama, harga, created_at, id; order: ASC / DESC)
  * - Pagination (page, limit) atau limit=0 / all=true untuk semua data
  */
-const getAllMenu = async (req, res) => {
+const getAllMenu = async(req, res) => {
     try {
         const {
             q,
@@ -104,16 +105,10 @@ const getAllMenu = async (req, res) => {
 
         const [rows] = await db.query(querySql, queryParams);
 
-        // Format harga ke number untuk kemudahan frontend
-        const formattedRows = rows.map(item => ({
-            ...item,
-            harga: parseFloat(item.harga)
-        }));
-
         res.json({
             success: true,
             message: "Berhasil mengambil data menu",
-            data: formattedRows,
+            data: rows,
             pagination: {
                 totalItems,
                 totalPages,
@@ -138,7 +133,7 @@ const getAllMenu = async (req, res) => {
  * GET /api/menu/categories
  * Mengambil daftar kategori unik beserta jumlah itemnya
  */
-const getCategories = async (req, res) => {
+const getCategories = async(req, res) => {
     try {
         const [rows] = await db.query(`
             SELECT kategori, COUNT(*) AS count
@@ -165,7 +160,7 @@ const getCategories = async (req, res) => {
  * GET /api/menu/stats
  * Mengambil ringkasan statistik menu (total menu, harga terendah, tertinggi, rata-rata, dll)
  */
-const getMenuStats = async (req, res) => {
+const getMenuStats = async(req, res) => {
     try {
         const [summary] = await db.query(`
             SELECT 
@@ -205,7 +200,7 @@ const getMenuStats = async (req, res) => {
  * GET /api/menu/:id
  * Mengambil detail satu menu berdasarkan ID
  */
-const getMenuById = async (req, res) => {
+const getMenuById = async(req, res) => {
     try {
         const { id } = req.params;
 
@@ -217,8 +212,7 @@ const getMenuById = async (req, res) => {
         }
 
         const [rows] = await db.query(
-            "SELECT * FROM menu WHERE id = ?",
-            [parseInt(id)]
+            "SELECT * FROM menu WHERE id = ?", [parseInt(id)]
         );
 
         if (rows.length === 0) {
@@ -230,7 +224,7 @@ const getMenuById = async (req, res) => {
 
         const item = {
             ...rows[0],
-            harga: parseFloat(rows[0].harga)
+            harga: String(rows[0].harga)
         };
 
         res.json({
@@ -251,7 +245,7 @@ const getMenuById = async (req, res) => {
  * POST /api/menu
  * Menambahkan menu baru dengan validasi ketat
  */
-const createMenu = async (req, res) => {
+const createMenu = async(req, res) => {
     try {
         const {
             nama,
@@ -270,9 +264,9 @@ const createMenu = async (req, res) => {
         if (!kategori || typeof kategori !== "string" || kategori.trim().length === 0) {
             errors.push("Kategori wajib diisi");
         }
-        const parsedHarga = parseFloat(harga);
-        if (isNaN(parsedHarga) || parsedHarga <= 0) {
-            errors.push("Harga harus berupa angka valid lebih besar dari 0");
+        const parsedHarga = String(harga == null ? "" : harga).trim();
+        if (!isValidHarga(parsedHarga)) {
+            errors.push("Harga harus berupa angka dari 0 sampai maksimal 63 digit");
         }
 
         const validStatus = status === "habis" ? "habis" : "tersedia";
@@ -289,8 +283,7 @@ const createMenu = async (req, res) => {
 
         const [result] = await db.query(
             `INSERT INTO menu (nama, kategori, harga, deskripsi, status, gambar)
-             VALUES (?, ?, ?, ?, ?, ?)`,
-            [
+             VALUES (?, ?, ?, ?, ?, ?)`, [
                 nama.trim(),
                 kategori.trim(),
                 parsedHarga,
@@ -308,7 +301,7 @@ const createMenu = async (req, res) => {
             message: "Menu berhasil ditambahkan",
             data: {
                 ...newItem[0],
-                harga: parseFloat(newItem[0].harga)
+                harga: String(newItem[0].harga)
             }
         });
 
@@ -325,7 +318,7 @@ const createMenu = async (req, res) => {
  * PUT /api/menu/:id
  * Memperbarui menu yang ada
  */
-const updateMenu = async (req, res) => {
+const updateMenu = async(req, res) => {
     try {
         const { id } = req.params;
 
@@ -357,15 +350,15 @@ const updateMenu = async (req, res) => {
         const current = existing[0];
         const newNama = nama !== undefined ? String(nama).trim() : current.nama;
         const newKategori = kategori !== undefined ? String(kategori).trim() : current.kategori;
-        const newHarga = harga !== undefined ? parseFloat(harga) : parseFloat(current.harga);
+        const newHarga = harga !== undefined ? String(harga).trim() : String(current.harga);
         const newDeskripsi = deskripsi !== undefined ? String(deskripsi).trim() : current.deskripsi;
         const newStatus = status !== undefined ? (status === "habis" ? "habis" : "tersedia") : current.status;
         const newGambar = gambar !== undefined ? String(gambar).trim() : current.gambar;
 
-        if (isNaN(newHarga) || newHarga <= 0) {
+        if (!isValidHarga(newHarga)) {
             return res.status(400).json({
                 success: false,
-                message: "Harga harus berupa angka valid lebih besar dari 0"
+                message: "Harga harus berupa angka dari 0 sampai maksimal 63 digit"
             });
         }
 
@@ -377,8 +370,7 @@ const updateMenu = async (req, res) => {
                  deskripsi = ?,
                  status = ?,
                  gambar = ?
-             WHERE id = ?`,
-            [newNama, newKategori, newHarga, newDeskripsi, newStatus, newGambar, parseInt(id)]
+             WHERE id = ?`, [newNama, newKategori, newHarga, newDeskripsi, newStatus, newGambar, parseInt(id)]
         );
 
         const [updated] = await db.query("SELECT * FROM menu WHERE id = ?", [parseInt(id)]);
@@ -388,7 +380,7 @@ const updateMenu = async (req, res) => {
             message: "Menu berhasil diperbarui",
             data: {
                 ...updated[0],
-                harga: parseFloat(updated[0].harga)
+                harga: String(updated[0].harga)
             }
         });
 
@@ -405,7 +397,7 @@ const updateMenu = async (req, res) => {
  * DELETE /api/menu/:id
  * Menghapus menu berdasarkan ID
  */
-const deleteMenu = async (req, res) => {
+const deleteMenu = async(req, res) => {
     try {
         const { id } = req.params;
 

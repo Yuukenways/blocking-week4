@@ -31,7 +31,7 @@ async function initDatabase() {
                 id INT AUTO_INCREMENT PRIMARY KEY,
                 nama VARCHAR(100) NOT NULL,
                 kategori VARCHAR(50) NOT NULL,
-                harga DECIMAL(12,2) NOT NULL,
+                harga DECIMAL(65,2) NOT NULL,
                 deskripsi TEXT NULL,
                 status VARCHAR(20) NOT NULL DEFAULT 'tersedia',
                 gambar VARCHAR(255) NULL,
@@ -39,6 +39,8 @@ async function initDatabase() {
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
         `);
+
+        await db.query(`ALTER TABLE menu MODIFY COLUMN harga DECIMAL(65,2) NOT NULL`);
 
         // Periksa apakah kolom 'deskripsi' dan 'status' sudah ada
         const [columns] = await db.query(`

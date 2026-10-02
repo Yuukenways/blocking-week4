@@ -1,97 +1,108 @@
-# 🍲 Resto Rasa Nusantara - Portal Menu & API
+# Rasa Nusantara
 
-Aplikasi Web Manajemen Menu Restoran modern berbasis **Express.js**, **MySQL**, dan **Vanilla JS Frontend** yang dilengkapi dengan **100+ data menu kuliner nusantara & internasional**, fitur pencarian instan, filter kategori, pengurutan, pagination, dan CRUD lengkap.
-
----
-
-## 🚀 Fitur Utama
-- **RESTful API Lengkap**: CRUD Menu, Endpoint Kategori, Statistik Ringkasan Menu.
-- **100+ Menu Pilihan**: Makanan Utama, Seafood, Mie & Pasta, Steak & Western, Cemilan, Dessert, Minuman.
-- **Frontend Interaktif & Estetik**: Modern Glassmorphism UI, Responsive, Real-time Debounced Search, Filter Kategori, Status Ketersediaan, Pagination, Modal Form CRUD, dan Modal Detail.
-- **Auto Database Initialization**: Skrip inisialisasi otomatis membuat database dan tabel jika belum ada.
+Aplikasi menu restoran dengan frontend Next.js, REST API Express, dan database MySQL.
 
 ---
 
-## 🛠️ Prasyarat
-- [Node.js](https://nodejs.org/) (versi 16 atau lebih baru)
-- MySQL Server (misal via XAMPP, Laragon, Docker, atau MySQL Server standalone)
+## Prasyarat
 
----
+- Windows PowerShell
+- Node.js 20.9 atau lebih baru dan npm
+- MySQL 8 (misalnya melalui Laragon)
 
-## ⚙️ Panduan Instalasi & Menjalankan
+Port default: MySQL `3306`, API `3000`, dan frontend `3001`.
 
-### 1. Masuk ke Direktori `api` dan Install Dependencies
-```bash
+## Menjalankan dari Awal
+
+### 1. Jalankan MySQL
+
+Buka Laragon dan pilih **Start All** atau jalankan layanan MySQL. Pastikan MySQL aktif pada port `3306` sebelum memulai API. Port database bukan port untuk perintah `npm run dev`.
+
+### 2. Siapkan dan jalankan API
+
+Buka terminal PowerShell pertama dari folder proyek:
+
+```powershell
 cd api
 npm install
+if (-not (Test-Path .env)) { Copy-Item .env.example .env }
 ```
 
-### 2. Konfigurasi Database (`.env`)
-Salin file `.env.example` menjadi `.env`:
-```bash
-cp .env.example .env
-```
-Sesuaikan konfigurasi koneksi MySQL Anda di dalam file `.env`:
+Pastikan `api/.env` sesuai dengan koneksi MySQL lokal:
+
 ```env
 PORT=3000
-DB_HOST=localhost
+DB_HOST=127.0.0.1
 DB_USER=root
 DB_PASSWORD=
 DB_NAME=db_restoran
 DB_PORT=3306
 ```
 
----
+Inisialisasi database/tabel, lalu jalankan API:
 
-## 📦 Menjalankan Database (`initDb.js` & `seed.js`)
-
-Ada 2 cara praktis untuk menjalankannya dari folder `api`:
-
-### Cara 1: Menggunakan Perintah `npm run` (Direkomendasikan)
-1. **Inisialisasi Database & Tabel:**
-   ```bash
-   npm run migrate
-   ```
-   *(Perintah ini akan membuat database `db_restoran` dan tabel `menu` secara otomatis jika belum ada).*
-
-2. **Isi 100+ Data Menu Makanan & Minuman:**
-   ```bash
-   npm run seed
-   ```
-   *(Perintah ini akan mengisi 115 menu hidangan lengkap dengan harga, foto, kategori, dan deskripsi).*
-
----
-
-### Cara 2: Menjalankan Langsung dengan `node`
-```bash
-# Inisialisasi struktur database & tabel:
-node config/initDb.js
-
-# Isi data 100+ menu kuliner:
-node seed.js
+```powershell
+npm run migrate
+npm run dev
 ```
 
----
+Biarkan terminal ini tetap berjalan. Untuk mode production gunakan `npm start` sebagai pengganti `npm run dev`.
 
-## 🏃 Menjalankan Aplikasi
+### 3. Siapkan dan jalankan frontend
 
-Jalankan server Express:
-```bash
-npm run dev
-# atau untuk production:
+Buka terminal PowerShell kedua dari folder proyek:
+
+```powershell
+cd frontend
+npm install
+$env:NEXT_PUBLIC_API_URL = "http://localhost:3000"
+npm run dev -- --port 3001
+```
+
+Buka [http://localhost:3001](http://localhost:3001). API health check: [http://localhost:3000/api/health](http://localhost:3000/api/health). Endpoint daftar menu: [http://localhost:3000/api/menu?limit=0](http://localhost:3000/api/menu?limit=0).
+
+Frontend dan API harus berjalan di terminal terpisah. Jika halaman menampilkan API tidak tersambung, pastikan MySQL aktif, API berjalan di port `3000`, dan `NEXT_PUBLIC_API_URL` mengarah ke alamat API. Jika API mengembalikan `data: []`, koneksi berhasil tetapi database belum memiliki menu.
+
+## Build dan Jalankan Production
+
+Pastikan MySQL aktif. Di terminal pertama, jalankan API:
+
+```powershell
+cd api
+npm install
+npm run migrate
 npm start
 ```
 
-Setelah server aktif, buka browser Anda di:
-- **Frontend Aplikasi**: [http://localhost:3000](http://localhost:3000)
-- **API Endpoint Menu**: [http://localhost:3000/api/menu](http://localhost:3000/api/menu)
-- **API Endpoint Kategori**: [http://localhost:3000/api/menu/categories](http://localhost:3000/api/menu/categories)
-- **API Endpoint Statistik**: [http://localhost:3000/api/menu/stats](http://localhost:3000/api/menu/stats)
+Di terminal kedua, atur URL API sebelum build frontend:
 
----
-
-## 🧪 Menguji API (Unit Test)
-Untuk memastikan seluruh endpoint API berfungsi normal:
-```bash
-npm test
+```powershell
+cd frontend
+npm install
+$env:NEXT_PUBLIC_API_URL = "http://localhost:3000"
+npm run build
+npm run start -- --port 3001
 ```
+
+Buka [http://localhost:3001](http://localhost:3001). API Express tidak memiliki langkah build terpisah; `npm start` menjalankan server Node.js. URL `NEXT_PUBLIC_API_URL` dimasukkan saat build frontend.
+
+## Menu Contoh
+
+Database baru belum berisi menu. Untuk mengisi menu contoh, jalankan dari folder `api`:
+
+```powershell
+npm run seed
+```
+
+**Perhatian:** skrip seed menjalankan `TRUNCATE TABLE menu` sebelum memasukkan data, sehingga menghapus semua menu yang sudah tersimpan. Jangan jalankan pada database berisi data penting tanpa backup.
+
+## Pemeriksaan API
+
+Dengan MySQL dan API aktif, jalankan dari PowerShell:
+
+```powershell
+Invoke-RestMethod http://localhost:3000/api/health
+Invoke-RestMethod "http://localhost:3000/api/menu?limit=0"
+```
+
+Atau jalankan test API dari folder `api` dengan `npm test`.

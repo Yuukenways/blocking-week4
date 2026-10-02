@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import {
   ArrowDown,
   ArrowRight,
@@ -21,7 +21,7 @@ type MenuItem = {
   id: number | string;
   nama: string;
   kategori: string;
-  harga: number;
+  harga: number | string;
   deskripsi: string;
   status: string;
   gambar: string;
@@ -102,12 +102,12 @@ const fallbackMenu: MenuItem[] = [
   },
 ];
 
-const formatRupiah = (value: number) =>
+const formatRupiah = (value: number | string | bigint) =>
   new Intl.NumberFormat("id-ID", {
     style: "currency",
     currency: "IDR",
     maximumFractionDigits: 0,
-  }).format(value);
+  }).format(typeof value === "string" ? BigInt(value.split(".")[0]) : value);
 
 export default function Home() {
   const [menuItems, setMenuItems] = useState<MenuItem[]>(fallbackMenu);
@@ -116,7 +116,13 @@ export default function Home() {
   const [favorites, setFavorites] = useState<Array<number | string>>([]);
   const [cart, setCart] = useState<Record<string, number>>({});
   const [cartOpen, setCartOpen] = useState(false);
-  const [apiConnected, setApiConnected] = useState(false);
+  const [apiStatus, setApiStatus] = useState<"checking" | "connected" | "disconnected">("checking");
+  const [createFormOpen, setCreateFormOpen] = useState(false);
+  const [isSavingMenu, setIsSavingMenu] = useState(false);
+  const [menuFormError, setMenuFormError] = useState("");
+  const [menuNotice, setMenuNotice] = useState("");
+  const [priceInput, setPriceInput] = useState("");
+  const createdMenuIds = useRef(new Set<string>());
 
   useEffect(() => {
     const controller = new AbortController();
@@ -128,12 +134,23 @@ export default function Home() {
         return response.json();
       })
       .then((payload: { data?: MenuItem[] }) => {
-        if (Array.isArray(payload.data) && payload.data.length > 0) {
-          setMenuItems(payload.data);
-          setApiConnected(true);
+        if (Array.isArray(payload.data)) {
+          const fetchedMenu = payload.data;
+          setMenuItems((current) => {
+            const fetchedIds = new Set(fetchedMenu.map((item) => String(item.id)));
+            const justCreated = current.filter((item) =>
+              createdMenuIds.current.has(String(item.id)) && !fetchedIds.has(String(item.id)),
+            );
+            return [...justCreated, ...fetchedMenu];
+          });
+          setApiStatus("connected");
+        } else {
+          throw new Error("Invalid menu response");
         }
       })
-      .catch(() => undefined);
+      .catch(() => {
+        if (!controller.signal.aborted) setApiStatus("disconnected");
+      });
 
     return () => controller.abort();
   }, []);
@@ -163,8 +180,8 @@ export default function Home() {
   );
   const cartCount = Object.values(cart).reduce((total, count) => total + count, 0);
   const cartTotal = cartItems.reduce(
-    (total, item) => total + item.harga * cart[String(item.id)],
-    0,
+    (total, item) => total + BigInt(String(item.harga).split(".")[0]) * BigInt(cart[String(item.id)]),
+    BigInt(0),
   );
 
   function changeQuantity(item: MenuItem, amount: number) {
@@ -184,6 +201,52 @@ export default function Home() {
         ? current.filter((favoriteId) => favoriteId !== itemId)
         : [...current, itemId],
     );
+  }
+
+  async function createMenu(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const formData = new FormData(form);
+    const harga = String(formData.get("harga") ?? "").replace(/\D/g, "");
+    setIsSavingMenu(true);
+    setMenuFormError("");
+    setMenuNotice("");
+
+    let apiResponded = false;
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000";
+      const response = await fetch(`${apiUrl}/api/menu`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...Object.fromEntries(formData.entries()), harga }),
+      });
+      apiResponded = true;
+      setApiStatus("connected");
+      const payload: { message?: string; errors?: string[]; data?: MenuItem } = await response.json();
+
+      if (!response.ok || !payload.data) {
+        throw new Error(payload.errors?.join(", ") || payload.message || "Menu gagal disimpan.");
+      }
+
+      const createdItem = payload.data;
+      createdMenuIds.current.add(String(createdItem.id));
+      setMenuItems((current) => [
+        createdItem,
+        ...current.filter((item) => String(item.id) !== String(createdItem.id)),
+      ]);
+      setApiStatus("connected");
+      setSelectedCategory("Semua");
+      setSearch("");
+      setCreateFormOpen(false);
+      setMenuNotice("Menu berhasil ditambahkan ke database.");
+      form.reset();
+      setPriceInput("");
+    } catch (error) {
+      if (!apiResponded) setApiStatus("disconnected");
+      setMenuFormError(error instanceof Error ? error.message : "Menu gagal disimpan.");
+    } finally {
+      setIsSavingMenu(false);
+    }
   }
 
   return (
@@ -225,8 +288,38 @@ export default function Home() {
             <p className="eyebrow"><span /> MENU HARI INI</p>
             <h2>Yang hangat dari <em>dapur kami.</em></h2>
           </div>
-          <p className="menu-caption">Dimasak segar setelah dipesan.<br />Dibuat untuk dinikmati bersama.</p>
+          <div className="section-actions">
+            <p className="menu-caption">Dimasak segar setelah dipesan.<br />Dibuat untuk dinikmati bersama.</p>
+            <button className="create-menu-trigger" onClick={() => { setCreateFormOpen((open) => !open); setMenuFormError(""); }} aria-expanded={createFormOpen}>
+              <Plus size={15} /> Tambah menu
+            </button>
+          </div>
         </div>
+
+        {menuNotice && <p className="menu-notice" role="status">{menuNotice}</p>}
+
+        {createFormOpen && (
+          <section className="menu-create-panel" aria-labelledby="create-menu-title">
+            <div className="create-panel-heading">
+              <h3 id="create-menu-title">Menu baru</h3>
+              <button className="close-create-form" type="button" onClick={() => setCreateFormOpen(false)} aria-label="Tutup form"><X size={18} /></button>
+            </div>
+            <form className="menu-create-form" onSubmit={createMenu}>
+              <label>Nama menu<input name="nama" required minLength={2} /></label>
+              <label>Kategori<input name="kategori" required /></label>
+              <label>Harga (Rp)<input name="harga" type="text" inputMode="numeric" autoComplete="off" placeholder="0" value={priceInput} onChange={(event) => { const digits = event.target.value.replace(/\D/g, ""); setPriceInput(digits.replace(/\B(?=(\d{3})+(?!\d))/g, ".")); }} required /></label>
+              <label>Status<select name="status" defaultValue="tersedia"><option value="tersedia">Tersedia</option><option value="habis">Habis</option></select></label>
+              <label className="create-field-wide">Deskripsi<textarea name="deskripsi" rows={3} /></label>
+              <label className="create-field-wide">URL gambar (opsional)<input name="gambar" type="url" /></label>
+              {menuFormError && <p className="create-form-error" role="alert">{menuFormError}</p>}
+              <div className="create-form-actions">
+                <button className="create-menu-submit" type="submit" disabled={isSavingMenu}>
+                  {isSavingMenu ? "Menyimpan..." : "Simpan ke database"} <ArrowRight size={15} />
+                </button>
+              </div>
+            </form>
+          </section>
+        )}
 
         <div className="menu-toolbar">
           <div className="category-list" role="group" aria-label="Filter kategori menu">
@@ -256,7 +349,7 @@ export default function Home() {
 
         <div className="menu-meta">
           <span>{visibleMenu.length} hidangan</span>
-          <span className="availability"><span className={apiConnected ? "status-dot live" : "status-dot"} />{apiConnected ? "Menu diperbarui" : "Pilihan dapur hari ini"}</span>
+          <span className="availability"><span className={`status-dot${apiStatus === "connected" ? " live" : apiStatus === "disconnected" ? " offline" : ""}`} />{apiStatus === "connected" ? "API tersambung · menu dari database" : apiStatus === "checking" ? "Menghubungkan API..." : "API tidak tersambung · menu contoh"}</span>
         </div>
 
         {visibleMenu.length > 0 ? (
